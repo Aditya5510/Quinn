@@ -118,18 +118,98 @@ export default function Calendar() {
   };
 
   const [visibleDays, setVisibleDays] = useState(() => {
+    const savedState = localStorage.getItem("calendarState");
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        if (
+          parsed.currentMonth !== undefined &&
+          parsed.currentYear !== undefined
+        ) {
+          const savedDate = {
+            day: 1,
+            month: parsed.currentMonth,
+            year: parsed.currentYear,
+          };
+          const days = [savedDate];
+          for (let i = 0; i < 30; i++) days.unshift(getPrevDate(days[0]));
+          for (let i = 0; i < 30; i++)
+            days.push(getNextDate(days[days.length - 1]));
+          return days;
+        }
+      } catch (e) {
+        console.warn("Failed to parse saved calendar state");
+      }
+    }
+
     const days = [start];
     for (let i = 0; i < 30; i++) days.unshift(getPrevDate(days[0]));
     for (let i = 0; i < 30; i++) days.push(getNextDate(days[days.length - 1]));
     return days;
   });
 
-  const [currentMonthLabel, setCurrentMonthLabel] = useState(
-    `${monthNames[today.getMonth()]} ${today.getFullYear()}`
-  );
+  const [currentMonthLabel, setCurrentMonthLabel] = useState(() => {
+    const savedState = localStorage.getItem("calendarState");
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        if (
+          parsed.currentMonth !== undefined &&
+          parsed.currentYear !== undefined
+        ) {
+          return `${monthNames[parsed.currentMonth]} ${parsed.currentYear}`;
+        }
+      } catch (e) {
+        console.warn("Failed to parse saved calendar state");
+      }
+    }
+    return `${monthNames[today.getMonth()]} ${today.getFullYear()}`;
+  });
+
   const [activeIndex, setActiveIndex] = useState(null);
 
   const containerRef = useRef(null);
+
+  useEffect(() => {
+    const savedState = localStorage.getItem("calendarState");
+    if (savedState && containerRef.current) {
+      try {
+        const parsed = JSON.parse(savedState);
+        if (parsed.scrollTop !== undefined) {
+          setTimeout(() => {
+            containerRef.current.scrollTop = parsed.scrollTop;
+          }, 100);
+        }
+      } catch (e) {
+        console.warn("Failed to parse saved scroll position");
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const saveState = () => {
+      if (containerRef.current) {
+        const parts = currentMonthLabel.split(" ");
+        const monthIndex = monthNames.indexOf(parts[0]);
+        const currentYear = parseInt(parts[1]);
+        const scrollTop = containerRef.current.scrollTop;
+
+        if (monthIndex !== -1 && !isNaN(currentYear)) {
+          localStorage.setItem(
+            "calendarState",
+            JSON.stringify({
+              currentMonth: monthIndex,
+              currentYear,
+              scrollTop,
+            })
+          );
+        }
+      }
+    };
+
+    const timeoutId = setTimeout(saveState, 100);
+    return () => clearTimeout(timeoutId);
+  }, [currentMonthLabel]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -203,12 +283,30 @@ export default function Calendar() {
         const [d, m, y] = closest.split("-");
         setCurrentMonthLabel(`${monthNames[parseInt(m)]} ${y}`);
       }
+
+      if (containerRef.current) {
+        const scrollTop = containerRef.current.scrollTop;
+        const parts = currentMonthLabel.split(" ");
+        const monthIndex = monthNames.indexOf(parts[0]);
+        const currentYear = parseInt(parts[1]);
+
+        if (monthIndex !== -1 && !isNaN(currentYear)) {
+          localStorage.setItem(
+            "calendarState",
+            JSON.stringify({
+              currentMonth: monthIndex,
+              currentYear,
+              scrollTop,
+            })
+          );
+        }
+      }
     };
 
     const c = containerRef.current;
     c.addEventListener("scroll", handleScroll);
     return () => c.removeEventListener("scroll", handleScroll);
-  }, [visibleDays]);
+  }, [visibleDays, currentMonthLabel]);
 
   return (
     <div
